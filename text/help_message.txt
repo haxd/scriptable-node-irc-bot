@@ -1,0 +1,3 @@
+Available commands:
+reload-scripts list-scripts help
+list-admins join part say quit

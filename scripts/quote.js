@@ -2,7 +2,7 @@ init = function() {
   //
 };
 
-run = function(tofrom, id) {
+run = function(whence, id) {
   var request = require('request');
   var jsdom = require('jsdom');
   var html = require('./scripts/quote/html.php');
@@ -13,10 +13,10 @@ run = function(tofrom, id) {
     turi = 'http://qdb.us/' + id;
   }
   
-  say(tofrom, 'Loading QDB.us...');
+  say(whence, 'Loading QDB.us...');
   
   request({uri: turi}, function(error, response, body) {
-    console.log('got request');
+    logit('Got QDB page');
     
     if (!error && response.statusCode == 200) {
       var window = jsdom.createWindow(body);
@@ -27,10 +27,10 @@ run = function(tofrom, id) {
           quote = quote.split('<br>\n');
           
           for (var i = 0; i < quote.length; i++) {
-            say(tofrom, quote[i]);
+            say(whence, quote[i]);
           }
         } else {
-          say(tofrom, 'Quote could not be found');
+          say(whence, 'Quote could not be found');
         }
       });
     }
@@ -46,10 +46,16 @@ event_message = function(from, to, msg) {
 
   switch(text[0]) {
     case '!qdb':
-      if (text.length > 1 && to.indexOf('#') > -1) {
-        run(to, text[1]);
+      if (text.length > 1) {
+        id = text[1];
       } else {
-        run(to);
+        id = 0;
+      }
+      
+      if (to.indexOf('#') > -1) {
+        run(to, id);
+      } else {
+        run(from, id);
       }
     break;
   }

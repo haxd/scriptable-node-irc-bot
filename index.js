@@ -1,21 +1,49 @@
-var fs = require('fs'), sys = require('sys'), irc = require('irc');
+var fs = require('fs'), sys = require('sys'), irc = require('irc'),
+    util = require('./util');
+
+var Script = process.binding('evals').Script;
+
+util.extend(global, require('./external/printf.commonjs'));
+util.extend(global, require('./external/time.commonjs'));
 
 process.on('uncaughtException', function (err) {
-  console.log('Caught exception: ' + err);
+  logit('Caught exception: ' + err);
 });
 
 global.config = require('./config');
+
+if (!Array.prototype.indexOf)
+{
+  Array.prototype.indexOf = function(elt /*, from*/)
+  {
+    var len = this.length;
+
+    var from = Number(arguments[1]) || 0;
+    from = (from < 0)
+         ? Math.ceil(from)
+         : Math.floor(from);
+    if (from < 0)
+      from += len;
+
+    for (; from < len; from++)
+    {
+      if (from in this &&
+          this[from] === elt)
+        return from;
+    }
+    return -1;
+  };
+}
 
 global.client = new irc.Client(config.server, config.nick, {
   debug: true
 });
 
-var Script = process.binding('evals').Script;
-
 global.scripts = [];
 
 client.on('motd', function() {
   client.say('NICKSERV', 'IDENTIFY ' + config.nickserv_password);
+  logit('Connected');
 });
 
 client.on('raw', function(message) {
@@ -32,35 +60,74 @@ client.on('raw', function(message) {
 
 client.on('message', function(from, to, msg) {
   script_invoke('message', from, to, msg);
-
-  switch(from.toLowerCase()) {
-    case config.admin[1].toLowerCase():
-    case config.admin[0].toLowerCase():
-      if (to.indexOf('#') == -1) {
-        switch (msg) {
-          case 'reload scripts':
-            reload_scripts();
-          break;
-          case 'list scripts':
-            for (var i = 0; i < scripts.length; i++) {
-              client.say(from, scripts[i].sandbox.info());
-            }
-          break;
-          default:
-            var spli = msg.split(' ');
-            client.say(spli[0], spli.slice(1).join(' '));
-          break;
+  
+  var commands = [
+    'reload-scripts', 'list-scripts', 'help', 'list-admins', 'join', 'part',
+    'say', 'quit'
+  ];
+  
+  var actions = [
+    function() { // reload scripts
+      reload_scripts();
+    },
+    function() { // list scripts
+      for (var i = 0; i < scripts.length; i++) {
+        client.say(from, scripts[i].sandbox.info());
+      }
+    },
+    function() { // help
+      var helpmessage = fs.readFile('text/help_message.txt', 'utf8', function(err, data) {
+        if (!err) {
+          var helpmessage = data.split('\n');
+          
+          for (var i = 0; i < helpmessage.length; i++) {
+            client.say(from, helpmessage[i]);
+          }
+        }
+      });
+    },
+    function() { // list admins
+      for (var i = 0; i < config.admin.length; i++) {
+        client.say(from, config.admin[i]);
+      }
+    },
+    function() { // join
+      client.join(msg.split(' ')[1]);
+    },
+    function() { // part
+      client.part(msg.split(' ')[1]);
+    },
+    function() { // say
+      var say = msg.split(' ');
+      say.shift();
+      var channel = say.shift();
+      client.say(channel, say.join(' '));
+    },
+    function() { // quit
+      client.quit();
+    }
+  ];
+  
+  if (to == config.nick) { // pm
+    for (var i = 0; i < config.admin.length; i ++) {
+      if (from == config.admin[i]) {
+        script_invoke('admin_pm', from, msg);
+        
+        var command = commands.indexOf(msg.split(' ')[0]);
+        
+        if (command > -1) {
+          actions[command].call();
         }
       }
-    break;
-    default:
-      console.log(msg);
-    break;
+    }
   }
+  
+  logit(vsprintf("<%s> <%s> %s", [from, to, msg]));
 });
 
 function get_new_sandbox() {
   return {
+    logit: logit,
     console: console,
     require: require,
     say: function() {
@@ -101,13 +168,13 @@ function process_scripts() {
       scripts[i].info = scripts[i].sandbox.info();
     } catch (err) {
       if (err) {
-        console.log('error');
+        logit('error');
         delete scripts[i];
       }
     }
   }
   
-  console.log('Scripts loaded');
+  logit('Scripts loaded');
 }
 
 function script_invoke() {
@@ -124,12 +191,16 @@ function script_invoke() {
         scripts[i].sandbox['event_' + event].apply(scripts[i].sandbox, args);
       } catch(err) {
         if (err) {
-          console.log('error');
+          logit('error');
           delete scripts[i];
         }
       }
     }
   }
+}
+
+function logit(msg) {
+  console.log(vsprintf("[%s] %s", [date('H:i:s'), msg]));
 }
 
 reload_scripts();
