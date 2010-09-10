@@ -1,5 +1,9 @@
 var fs = require('fs'), sys = require('sys'), irc = require('irc');
 
+process.on('uncaughtException', function (err) {
+  console.log('Caught exception: ' + err);
+});
+
 global.config = require('./config');
 
 global.client = new irc.Client(config.server, config.nick, {
