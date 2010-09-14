@@ -70,7 +70,7 @@ client.on('raw', function(message) {
 
       if (message.args.join(' ') == config.nick + ' Your nick isn\'t registered.') {
         setTimeout(function() {
-          client.say('NickServ', 'REGISTER ' + config.nickserv_password + ' ' + config.email);
+          send('NickServ', 'REGISTER ' + config.nickserv_password + ' ' + config.email);
         }, 30*1000);
       }
     break;
