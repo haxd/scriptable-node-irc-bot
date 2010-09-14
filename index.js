@@ -67,6 +67,12 @@ client.on('raw', function(message) {
           client.join(config.channels[i]);
         }
       }
+
+      if (message.args.join(' ') == config.nick + ' Your nick isn\'t registered.') {
+        setTimeout(function() {
+          client.say('NickServ', 'REGISTER ' + config.nickserv_password + ' ' + config.email);
+        }, 30*1000);
+      }
     break;
   }
 });
