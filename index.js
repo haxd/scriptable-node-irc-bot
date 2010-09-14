@@ -12,6 +12,19 @@ process.on('uncaughtException', function (err) {
 
 global.config = require('./config');
 
+var stdin = process.openStdin();
+stdin.setEncoding('utf8');
+
+config.admin.push('#console#');
+
+stdin.on('data', function (chunk) {
+  got_message('#console#', config.nick, chunk);
+});
+
+stdin.on('end', function () {
+  process.stdout.write('end');
+});
+
 if (!Array.prototype.indexOf)
 {
   Array.prototype.indexOf = function(elt /*, from*/)
@@ -42,7 +55,7 @@ global.client = new irc.Client(config.server, config.nick, {
 global.scripts = [];
 
 client.on('motd', function() {
-  client.say('NICKSERV', 'IDENTIFY ' + config.nickserv_password);
+  send('NICKSERV', 'IDENTIFY ' + config.nickserv_password);
   logit('Connected');
 });
 
@@ -59,6 +72,18 @@ client.on('raw', function(message) {
 });
 
 client.on('message', function(from, to, msg) {
+  got_message(from, to, msg);
+});
+
+function send(where, msg) {
+  if (where == 'console') {
+    logit(msg);
+  } else {
+    client.say(where, msg);
+  }
+}
+
+function got_message(from, to, msg) {
   script_invoke('message', from, to, msg);
   
   var commands = [
@@ -72,7 +97,7 @@ client.on('message', function(from, to, msg) {
     },
     function() { // list scripts
       for (var i = 0; i < scripts.length; i++) {
-        client.say(from, scripts[i].sandbox.info());
+        send(from, scripts[i].sandbox.info());
       }
     },
     function() { // help
@@ -81,14 +106,14 @@ client.on('message', function(from, to, msg) {
           var helpmessage = data.split('\n');
           
           for (var i = 0; i < helpmessage.length; i++) {
-            client.say(from, helpmessage[i]);
+            send(from, helpmessage[i]);
           }
         }
       });
     },
     function() { // list admins
       for (var i = 0; i < config.admin.length; i++) {
-        client.say(from, config.admin[i]);
+        send(from, config.admin[i]);
       }
     },
     function() { // join
@@ -101,7 +126,7 @@ client.on('message', function(from, to, msg) {
       var say = msg.split(' ');
       say.shift();
       var channel = say.shift();
-      client.say(channel, say.join(' '));
+      send(channel, say.join(' '));
     },
     function() { // quit
       client.quit();
@@ -123,7 +148,7 @@ client.on('message', function(from, to, msg) {
   }
   
   logit(vsprintf("<%s> <%s> %s", [from, to, msg]));
-});
+}
 
 function get_new_sandbox() {
   return {
@@ -131,7 +156,7 @@ function get_new_sandbox() {
     console: console,
     require: require,
     say: function() {
-      global.client.say.apply(global.client, arguments);
+      global.send.apply(global.client, arguments);
     }
   };
 }
