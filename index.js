@@ -153,6 +153,10 @@ function get_new_sandbox() {
     logit: logit,
     console: console,
     require: require,
+		setInterval: setInterval,
+		setTimeout: setTimeout,
+		clearInterval: clearInterval,
+		clearTimeout: clearTimeout,
     say: function() {
       send.apply(global.client, arguments);
     },
