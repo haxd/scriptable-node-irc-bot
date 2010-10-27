@@ -19,20 +19,31 @@ run = function(whence, id) {
     logit('Got QDB page');
     
     if (!error && response.statusCode == 200) {
+			logit('No Errors');
+
       var window = jsdom.createWindow(body);
       jsdom.jQueryify(window, './scripts/quote/jquery.js', function(window, $) {
         var quote = html.stripslashes(html.html_entity_decode($($('.qt')[0]).html()));
+
+				logit('Page jQuerified');
         
         if (quote.length > 3) {
+					logit('Got quote');
+					logit(quote);
+
           quote = quote.split('<br>\n');
           
           for (var i = 0; i < quote.length; i++) {
             say(whence, quote[i]);
           }
+
+
         } else {
           say(whence, 'Quote could not be found');
         }
       });
+    } else {
+      say(whence, 'Error: ' + error);
     }
   });
 };

@@ -12,19 +12,6 @@ process.on('uncaughtException', function (err) {
 
 global.config = require('./config');
 
-var stdin = process.openStdin();
-stdin.setEncoding('utf8');
-
-config.admin.push('#console#');
-
-stdin.on('data', function (chunk) {
-  got_message('#console#', config.nick, chunk);
-});
-
-stdin.on('end', function () {
-  process.stdout.write('end');
-});
-
 if (!Array.prototype.indexOf)
 {
   Array.prototype.indexOf = function(elt /*, from*/)
@@ -49,7 +36,7 @@ if (!Array.prototype.indexOf)
 }
 
 global.client = new irc.Client(config.server, config.nick, {
-  debug: true
+  debug: false
 });
 
 global.scripts = [];
@@ -102,8 +89,13 @@ function got_message(from, to, msg) {
       reload_scripts();
     },
     function() { // list scripts
-      for (var i = 0; i < scripts.length; i++) {
-        send(from, scripts[i].sandbox.info());
+      for (var i = 0; i < global.scripts.length; i++) {
+				try {
+	        send(from, global.scripts[i].sandbox.info());
+				} catch (e) {
+					logit(e.stack);
+					logit(global.scripts.length);
+				}
       }
     },
     function() { // help
@@ -162,8 +154,9 @@ function get_new_sandbox() {
     console: console,
     require: require,
     say: function() {
-      global.send.apply(global.client, arguments);
-    }
+      send.apply(global.client, arguments);
+    },
+		me: config.nick
   };
 }
 
@@ -177,8 +170,10 @@ function reload_scripts() {
   fs.readdir('./scripts/', function(err, files) {
     if (!err) {
       for (var i = 0; i < files.length; i++) {
-        if (files[i].indexOf('.js') > -1) {
-          scripts.push({
+        if (files[i].indexOf('.js') == files[i].length-3) {
+					logit('Loading ' + files[i]);
+
+					global.scripts.push({
             file: fs.readFileSync('./scripts/' + files[i]),
             name: files[i],
             sandbox: get_new_sandbox()
@@ -192,15 +187,17 @@ function reload_scripts() {
 }
 
 function process_scripts() {
-  for (var i = 0; i < scripts.length; i++) {
+  for (var i = 0; i < global.scripts.length; i++) {
     try {
-      Script.runInNewContext(scripts[i].file, scripts[i].sandbox, scripts[i].name);
-      scripts[i].sandbox.init();
-      scripts[i].info = scripts[i].sandbox.info();
+      if (scripts[i]) {
+        Script.runInNewContext(global.scripts[i].file, global.scripts[i].sandbox, global.scripts[i].name);
+        global.scripts[i].sandbox.init();
+        global.scripts[i].info = global.scripts[i].sandbox.info();
+      }
     } catch (err) {
       if (err) {
-        logit('error');
-        delete scripts[i];
+        logit('process_scripts error: ' + err);
+        delete global.scripts[i];
       }
     }
   }
@@ -216,14 +213,16 @@ function script_invoke() {
     args.push(arguments[i]);
   }
   
-  for (var i = 0; i < scripts.length; i++) {
-    if (scripts[i].sandbox['event_' + event]) {
+  for (var i = 0; i < global.scripts.length; i++) {
+    if (global.scripts[i])
+    if (global.scripts[i].sandbox['event_' + event]) {
       try {
-        scripts[i].sandbox['event_' + event].apply(scripts[i].sandbox, args);
+				var eventfunc = global.scripts[i].sandbox['event_' + event];
+				eventfunc.apply(global.scripts[i].sandbox, args);
       } catch(err) {
         if (err) {
-          logit('error');
-          delete scripts[i];
+          logit('script_invoke error['+i+']: ' + err);
+          delete global.scripts[i];
         }
       }
     }
